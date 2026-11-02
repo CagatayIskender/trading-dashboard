@@ -231,6 +231,8 @@ function Content({ d, onResetHalt }: { d: Dashboard; onResetHalt: () => void }) 
           )}
         </section>
 
+        <Signals list={d.signals ?? []} />
+
         {d.backtest && <Backtest bt={d.backtest} />}
 
         {d.events.length > 0 && (
@@ -281,6 +283,37 @@ function Backtest({ bt }: { bt: NonNullable<Dashboard["backtest"]> }) {
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function Signals({ list }: { list: Dashboard["signals"] }) {
+  const medium = list.filter((s) => s.horizon === "medium").sort((a, b) => b.score - a.score);
+  const shown = [...medium.filter((s) => s.score > 0).slice(0, 4), ...medium.filter((s) => s.score < 0).slice(-4)];
+  const at = list[0]?.created_at;
+  return (
+    <section className="card span-12 rise" style={{ animationDelay: "270ms" }}>
+      <div className="card-head">
+        <h2>AI görüşleri</h2>
+        <span className="sub">{at ? `Claude, ${fmtDateTime(at)} · ${medium.length} şirket` : "her hafta içi sabah güncellenir"}</span>
+      </div>
+      {shown.length === 0 ? (
+        <div className="empty"><div className="big">Henüz analiz yok</div><div>Claude her hafta içi sabah haberleri ve finansalları okuyup buraya puan yazar.</div></div>
+      ) : (
+        <ul className="feed">
+          {shown.map((s) => (
+            <li key={s.symbol}>
+              <span className={`side ${s.score >= 0 ? "buy" : "sell"}`} aria-label={s.score >= 0 ? "Olumlu" : "Olumsuz"}>{s.score >= 0 ? "+" : "−"}</span>
+              <div>
+                <div style={{ fontWeight: 600 }}>{s.name}</div>
+                <div className="reason">{s.rationale}</div>
+                {s.sources?.[0] && <a className="faint" style={{ fontSize: 12 }} href={s.sources[0]} target="_blank" rel="noreferrer">kaynak</a>}
+              </div>
+              <div className={`r num ${s.score >= 0 ? "pos" : "neg"}`}>{s.score > 0 ? "+" : ""}{s.score.toFixed(2)}</div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

@@ -53,6 +53,7 @@ export interface Dashboard {
     id: number; t: string; symbol: string; name: string; sleeve: Sleeve; side: "buy" | "sell";
     qty: number; price_eur: number; fee_eur: number; realized_pnl_eur: number | null; reason: string;
   }[];
+  signals: { symbol: string; name: string; score: number; horizon: "short" | "medium" | "long"; rationale: string; sources: string[]; created_at: string }[];
   events: { t: string; level: "info" | "warn" | "risk"; message: string }[];
   backtest: null | {
     created_at: string;

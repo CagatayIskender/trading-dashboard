@@ -176,11 +176,20 @@ async function dashboard(db: Db) {
     return { t: h.t, equity: h.equity, benchmark: b0 && b ? (config.startingCapitalEur * b) / b0 : null };
   });
 
-  const [{ data: fills }, { data: events }, { data: bt }] = await Promise.all([
+  const [{ data: fills }, { data: events }, { data: bt }, { data: sigs }] = await Promise.all([
     db.from("fills").select("*").eq("account_id", account.id).order("t", { ascending: false }).limit(40),
     db.from("events").select("t,level,message").eq("account_id", account.id).order("t", { ascending: false }).limit(20),
     db.from("backtest_runs").select("created_at,range,label,metrics,curve").eq("label", "panel").order("id", { ascending: false }).limit(1).maybeSingle(),
+    db.from("signals").select("symbol,score,horizon,rationale,sources,created_at").gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(300),
   ]);
+  // Newest live AI view per symbol and horizon.
+  const seen = new Set<string>();
+  const signals = (sigs ?? []).filter((x: { symbol: string; horizon: string }) => {
+    const k = `${x.symbol}|${x.horizon}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map((x: Record<string, unknown>) => ({ ...x, name: names[x.symbol as string] ?? x.symbol }));
 
   return {
     account: { name: account.name, mode: account.mode, startedAt: account.created_at, updatedAt: account.updated_at },
@@ -194,6 +203,7 @@ async function dashboard(db: Db) {
     fills: (fills ?? []).map((f: Record<string, unknown>) => ({ ...f, name: names[f.symbol as string] ?? f.symbol })),
     events: events ?? [],
     backtest: bt ?? null,
+    signals,
     risk: config.risk,
   };
 }
