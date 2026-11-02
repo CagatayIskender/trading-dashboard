@@ -1,3 +1,4 @@
 node_modules
 .env
 data-cache
+supabase/functions/engine-tick/engine
