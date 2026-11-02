@@ -254,13 +254,14 @@ function Content({ d, onResetHalt }: { d: Dashboard; onResetHalt: () => void }) 
 function Backtest({ bt }: { bt: NonNullable<Dashboard["backtest"]> }) {
   const m = bt.metrics;
   const benchEnd = m.startEquity * (1 + m.benchmarkReturn);
-  const years = bt.range.replace("y", "");
+  // range is a Yahoo span ("5y") or a start date ("2014-01-01").
+  const title = /^\d{4}-/.test(bt.range) ? `${bt.range.slice(0, 4)}'ten bugüne` : `son ${bt.range.replace("y", "")} yıl`;
   return (
     <section className="card span-12 rise" style={{ animationDelay: "300ms" }}>
       <div className="card-head">
         <div>
-          <h2>Geçmiş test: son {years} yıl</h2>
-          <div className="sub">Aynı kurallar gerçek fiyatlarla, işlem ücretleri dahil. Yapay zeka analizi henüz yok. Geçmiş, geleceği garanti etmez.</div>
+          <h2>Geçmiş test: {title}</h2>
+          <div className="sub">Aynı kurallar gerçek fiyatlarla, işlem ücretleri dahil. Yapay zeka analizi henüz yok. Hisse listesi bugünün bilgisiyle seçildiği için geçmiş sonuç olduğundan iyi görünür; geleceği garanti etmez.</div>
         </div>
         <Legend />
       </div>

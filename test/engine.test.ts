@@ -95,6 +95,8 @@ describe("risk", () => {
 
   it("lifts the drawdown brake by itself after the pause and re-bases the peak", () => {
     const cfg = config();
+    cfg.risk.maxDrawdownPct = 0.15;
+    cfg.risk.drawdownPauseDays = 30;
     const s = newPortfolio(cfg, "demo", T0);
     updateRiskState(s, 2000, cfg, T0);
     updateRiskState(s, 1600, cfg, T0 + 3 * DAY);
@@ -108,6 +110,7 @@ describe("risk", () => {
 
   it("halts buying after a big drawdown until reset when the pause is 0", () => {
     const cfg = config();
+    cfg.risk.maxDrawdownPct = 0.15;
     cfg.risk.drawdownPauseDays = 0;
     const s = newPortfolio(cfg, "demo", T0);
     updateRiskState(s, 2000, cfg, T0);
@@ -235,8 +238,8 @@ describe("config and stats helpers", () => {
 
   it("a re-entry cooldown cuts short-term trading", () => {
     const data = syntheticMarket(700);
-    const loose = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 0, minHoldDays: 0, regimeSma: 0 } }));
-    const strict = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 20, minHoldDays: 10 } }));
+    const loose = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 0, minHoldDays: 0, regimeSma: 0, rsiMax: 75 } }));
+    const strict = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 20, minHoldDays: 10, rsiMax: 75 } }));
     const count = (r: typeof loose) => r.fills.filter((f) => f.sleeve === "tactical").length;
     expect(count(strict)).toBeLessThan(count(loose));
   });
@@ -256,6 +259,7 @@ describe("swing hold buffer", () => {
     const data = syntheticMarket(400);
     const t = T0 + 399 * DAY;
     const base = config();
+    base.swing.holdBuffer = 0;
     const view = new MarketView(data, base.universe, t);
     const ctx = (cfg: typeof base, s: ReturnType<typeof newPortfolio>) => ({ state: s, view, config: cfg, signals: [], equityEur: 2000, t });
     const eligible = rankSwing(ctx(base, newPortfolio(base, "demo", T0))).filter((c) => c.inTrend && c.score > 0);
