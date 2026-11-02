@@ -1,0 +1,19 @@
+{
+  "name": "trading-system",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "backtest": "node --experimental-strip-types scripts/backtest.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "type": "module",
+  "private": true
+}
