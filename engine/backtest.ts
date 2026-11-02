@@ -127,3 +127,28 @@ function sharpe(values: number[]): number {
   const sd = Math.sqrt(rets.reduce((s, r) => s + (r - mean) ** 2, 0) / (rets.length - 1));
   return sd > 0 ? (mean / sd) * Math.sqrt(252) : 0;
 }
+
+export interface PeriodStats {
+  from: string;
+  to: string;
+  cagr: number;
+  maxDrawdown: number;
+  benchmarkCagr: number;
+  benchmarkMaxDrawdown: number;
+}
+
+/** Return and drawdown of the system and the benchmark between two dates, for in/out-of-sample checks. */
+export function periodStats(curve: EquityPoint[], from: number, to: number): PeriodStats | null {
+  const seg = curve.filter((p) => p.t >= from && p.t <= to);
+  if (seg.length < 2) return null;
+  const years = (seg.at(-1)!.t - seg[0]!.t) / (365.25 * 86_400_000);
+  const day = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return {
+    from: day(seg[0]!.t),
+    to: day(seg.at(-1)!.t),
+    cagr: cagr(seg[0]!.equity, seg.at(-1)!.equity, years),
+    maxDrawdown: maxDrawdown(seg.map((p) => p.equity)),
+    benchmarkCagr: cagr(seg[0]!.benchmark, seg.at(-1)!.benchmark, years),
+    benchmarkMaxDrawdown: maxDrawdown(seg.map((p) => p.benchmark)),
+  };
+}

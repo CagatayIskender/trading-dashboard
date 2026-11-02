@@ -6,7 +6,11 @@ import type { Bar } from "../types.ts";
  * touching the engine. Works in Node 18+ and Deno, which both have global fetch.
  */
 export async function fetchDailyBars(symbol: string, range = "5y", fetchImpl: typeof fetch = fetch): Promise<Bar[]> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includeAdjustedClose=true`;
+  // `range` is a Yahoo range ("5y", "10y") or a start date ("2014-01-01") for daily bars from then on.
+  const span = /^\d{4}-\d{2}-\d{2}$/.test(range)
+    ? `period1=${Math.floor(Date.parse(range) / 1000)}&period2=${Math.floor(Date.now() / 1000)}`
+    : `range=${range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${span}&interval=1d&includeAdjustedClose=true`;
   const res = await fetchImpl(url, { headers: { "User-Agent": "Mozilla/5.0 trading-system" } });
   if (!res.ok) throw new Error(`Yahoo ${symbol}: HTTP ${res.status}`);
   return parseChart(await res.json());

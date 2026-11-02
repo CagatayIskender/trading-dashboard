@@ -5,8 +5,16 @@ import type { Bar, Currency, Instrument, MarketData } from "./types.ts";
  * A point-in-time view of market data. Strategies only ever see bars up to `asOf`,
  * which is what keeps backtests free of look-ahead bias.
  */
+/**
+ * Bars a view exposes per symbol. Every indicator in the engine looks back at most ~300 bars
+ * (SMA 200, 12-month momentum), and EMAs have fully converged long before 600, so capping the
+ * window keeps a multi-year backtest linear in time instead of quadratic.
+ */
+export const VIEW_WINDOW_BARS = 600;
+
 export class MarketView {
   private cache = new Map<string, Bar[]>();
+  private closeCache = new Map<string, number[]>();
   private bySymbol: Map<string, Instrument>;
 
   constructor(
@@ -26,7 +34,8 @@ export class MarketView {
     const hit = this.cache.get(symbol);
     if (hit) return hit;
     const all = this.data[symbol] ?? [];
-    const out = all.slice(0, upperBound(all, this.asOf));
+    const end = upperBound(all, this.asOf);
+    const out = all.slice(Math.max(0, end - VIEW_WINDOW_BARS), end);
     this.cache.set(symbol, out);
     return out;
   }
@@ -54,7 +63,11 @@ export class MarketView {
 
   /** Close series in the instrument's own currency (indicators are currency-neutral). */
   closes(symbol: string): number[] {
-    return this.bars(symbol).map((b) => b.c);
+    const hit = this.closeCache.get(symbol);
+    if (hit) return hit;
+    const out = this.bars(symbol).map((b) => b.c);
+    this.closeCache.set(symbol, out);
+    return out;
   }
 
   /** True when the latest bar is no older than `maxAgeMs` (filters halted or delisted data). */

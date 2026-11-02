@@ -7,7 +7,7 @@ import { atr, ema, momentum, rsi, sma } from "../engine/indicators.ts";
 import { MarketView } from "../engine/market.ts";
 import { applyFill, equityEur, newPortfolio, paperFill } from "../engine/portfolio.ts";
 import { filterIntents, stopExits, updateRiskState } from "../engine/risk.ts";
-import { rankSwing } from "../engine/strategies/swing.ts";
+import { rankSwing, swingStrategy } from "../engine/strategies/swing.ts";
 import { config, DAY, flat, syntheticMarket, T0, walk } from "./fixtures.ts";
 
 describe("indicators", () => {
@@ -93,8 +93,22 @@ describe("risk", () => {
     expect(stopExits(s, view, cfg)).toHaveLength(1);
   });
 
-  it("halts buying after a big drawdown until reset", () => {
+  it("lifts the drawdown brake by itself after the pause and re-bases the peak", () => {
     const cfg = config();
+    const s = newPortfolio(cfg, "demo", T0);
+    updateRiskState(s, 2000, cfg, T0);
+    updateRiskState(s, 1600, cfg, T0 + 3 * DAY);
+    expect(s.halted?.kind).toBe("drawdown");
+    updateRiskState(s, 1580, cfg, T0 + 20 * DAY);
+    expect(s.halted).not.toBeNull();
+    updateRiskState(s, 1590, cfg, T0 + 35 * DAY);
+    expect(s.halted).toBeNull();
+    expect(s.peakEquity).toBe(1590);
+  });
+
+  it("halts buying after a big drawdown until reset when the pause is 0", () => {
+    const cfg = config();
+    cfg.risk.drawdownPauseDays = 0;
     const s = newPortfolio(cfg, "demo", T0);
     updateRiskState(s, 2000, cfg, T0);
     updateRiskState(s, 1600, cfg, T0 + 3 * DAY);
@@ -234,5 +248,29 @@ describe("config and stats helpers", () => {
       { symbol: "A", sleeve: "swing", side: "sell", qty: 1, priceEur: 110, feeEur: 1, t: 1, reason: "", realizedPnlEur: 9 },
     ]);
     expect(s.swing).toEqual({ trades: 2, feesEur: 2, realizedEur: 8, winRate: 1 });
+  });
+});
+
+describe("swing hold buffer", () => {
+  it("keeps a held name that slipped just outside the top picks", () => {
+    const data = syntheticMarket(400);
+    const t = T0 + 399 * DAY;
+    const base = config();
+    const view = new MarketView(data, base.universe, t);
+    const ctx = (cfg: typeof base, s: ReturnType<typeof newPortfolio>) => ({ state: s, view, config: cfg, signals: [], equityEur: 2000, t });
+    const eligible = rankSwing(ctx(base, newPortfolio(base, "demo", T0))).filter((c) => c.inTrend && c.score > 0);
+    expect(eligible.length).toBeGreaterThan(base.swing.maxPositions);
+    const fourth = eligible[base.swing.maxPositions]!.symbol;
+    const hold = (cfg: typeof base) => {
+      const s = newPortfolio(cfg, "demo", T0);
+      s.positions.push({ symbol: fourth, sleeve: "swing", qty: 1, avgPriceEur: 10, openedAt: T0, peakEur: 10, stopEur: null });
+      return swingStrategy(ctx(cfg, s));
+    };
+    expect(hold(base).some((i) => i.symbol === fourth && i.side === "sell")).toBe(true);
+    const buffered = config();
+    buffered.swing.holdBuffer = 1;
+    const out = hold(buffered);
+    expect(out.some((i) => i.symbol === fourth)).toBe(false);
+    expect(out.filter((i) => i.side === "buy")).toHaveLength(buffered.swing.maxPositions - 1);
   });
 });

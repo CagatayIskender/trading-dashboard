@@ -1,11 +1,12 @@
 // Supabase Edge Function, called every 15 minutes by pg_cron (see supabase/migrations/0002_schedule.sql).
 // Runs the engine for every active account: stop checks on each tick, strategies once a day.
 // With body {"action":"backtest","range":"5y","label":"...","overrides":{...}} it instead replays real history and stores
-// the result in backtest_runs.
+// the result in backtest_runs. With {"action":"sweep","from":"2014-01-01","split":"2021-01-01","run":"name","variants":[...]}
+// it tests many settings in a chain of small calls (see runSweep).
 // `./engine` is a copy of the repo's engine/ made by scripts/prepare-functions.sh before deploy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { DEFAULT_CONFIG, FX_SYMBOLS, mergeConfig, type EngineConfig } from "./engine/config.ts";
-import { backtest, sleeveStats } from "./engine/backtest.ts";
+import { backtest, periodStats, sleeveStats } from "./engine/backtest.ts";
 import { runCycle } from "./engine/cycle.ts";
 import { fetchDailyBars } from "./engine/data/yahoo.ts";
 import type { Bar, MarketData, PortfolioState, Signal } from "./engine/types.ts";
@@ -17,6 +18,7 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   if (!(await authorized(db, req))) return new Response("forbidden", { status: 403 });
   const body = await req.json().catch(() => ({}));
+  if (body?.action === "sweep") return runSweep(db, req, body);
   if (body?.action === "backtest") {
     return runBacktest(db, typeof body.range === "string" ? body.range : "5y", body.overrides, typeof body.label === "string" ? body.label : null);
   }
@@ -87,6 +89,66 @@ async function runBacktest(db: any, range: string, overrides: unknown, label: st
   const bySleeve = sleeveStats(r.fills);
   await db.from("backtest_runs").insert({ range, label, config, metrics: { ...r.metrics, bySleeve }, curve, fills: r.fills });
   return Response.json({ label, range, metrics: r.metrics, bySleeve, missing, days: r.curve.length });
+}
+
+/**
+ * Runs `batch` variants (a function call has a small CPU budget), stores each result in backtest_runs
+ * as label "sweep:<run>:<label>", then hands the remaining variants to a fresh call of itself.
+ */
+// deno-lint-ignore no-explicit-any
+async function runSweep(db: any, req: Request, body: any): Promise<Response> {
+  const from = typeof body.from === "string" ? body.from : "2014-01-01";
+  const splitDay = typeof body.split === "string" ? body.split : "2021-01-01";
+  const split = Date.parse(splitDay);
+  const run = typeof body.run === "string" ? body.run : new Date().toISOString().slice(0, 16);
+  const batch = Math.max(1, Math.min(4, Number(body.batch) || 2));
+  const variants: { label: string; overrides?: unknown }[] = Array.isArray(body.variants) ? body.variants : [];
+  const now = variants.slice(0, batch);
+  const rest = variants.slice(batch);
+
+  const symbols = new Set<string>(Object.values(FX_SYMBOLS));
+  for (const v of now) for (const i of mergeConfig(DEFAULT_CONFIG, v.overrides as Partial<EngineConfig>).universe) symbols.add(i.symbol);
+  const data: MarketData = {};
+  await Promise.all([...symbols].map(async (s) => {
+    try {
+      data[s] = await fetchDailyBars(s, from);
+    } catch (e) {
+      console.warn(`sweep: ${s}: ${(e as Error).message}`);
+    }
+  }));
+  const r4 = (v: number) => Math.round(v * 10000) / 10000;
+  const results = [];
+  for (const v of now) {
+    try {
+      const config = mergeConfig(DEFAULT_CONFIG, v.overrides as Partial<EngineConfig>);
+      const r = backtest(data, config);
+      const m = r.metrics;
+      const end = r.curve.at(-1)!.t;
+      const sleeves = sleeveStats(r.fills);
+      const summary = {
+        end: Math.round(m.endEquity), bench: Math.round(m.startEquity * (1 + m.benchmarkReturn)),
+        cagr: r4(m.cagr), mdd: r4(m.maxDrawdown), sharpe: r4(m.sharpe), trades: m.trades, fees: Math.round(m.feesEur),
+        a: periodStats(r.curve, r.curve[0]!.t, split), b: periodStats(r.curve, split, end),
+        halts: r.events.filter((e) => e.message.startsWith("Zirveden")).length,
+        sleeves: Object.fromEntries(Object.entries(sleeves).map(([k, s]) => [k, { n: s.trades, pnl: Math.round(s.realizedEur) }])),
+      };
+      const curve = r.curve.filter((_, i) => i % 5 === 0 || i === r.curve.length - 1);
+      await db.from("backtest_runs").insert({ range: from, label: `sweep:${run}:${v.label}`, config: v.overrides ?? {}, metrics: summary, curve, fills: [] });
+      results.push({ label: v.label, ...summary });
+    } catch (e) {
+      await db.from("backtest_runs").insert({ range: from, label: `sweep:${run}:${v.label}`, config: v.overrides ?? {}, metrics: { error: (e as Error).message }, curve: [], fills: [] });
+    }
+  }
+  if (rest.length) {
+    const next = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/engine-tick`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cron-secret": req.headers.get("x-cron-secret") ?? "" },
+      body: JSON.stringify({ action: "sweep", from, split: splitDay, run, batch, variants: rest }),
+    }).then((r) => r.body?.cancel()).catch((e) => console.warn(`sweep chain: ${(e as Error).message}`));
+    // @ts-ignore EdgeRuntime is provided by Supabase Edge Functions.
+    if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(next);
+  }
+  return Response.json({ run, done: results.length, remaining: rest.length, results });
 }
 
 /** The cron job sends a random secret stored in app_secrets (readable only with the service role). */

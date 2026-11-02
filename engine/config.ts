@@ -18,7 +18,9 @@ export interface EngineConfig {
     cashBufferPct: number; // always keep this share of equity in cash
     maxPositionPctOfSleeve: number;
     dailyLossLimitPct: number; // stop new buys for the rest of the day
-    maxDrawdownPct: number; // stop all new buys until manually reset
+    maxDrawdownPct: number; // stop all new buys after this fall from the peak
+    /** Days the drawdown brake stays on before buying resumes by itself (0 = only a manual reset). */
+    drawdownPauseDays: number;
     swingStopAtr: number; // initial stop distance in ATRs
     tacticalStopAtr: number;
     trailingStopPct: number; // tactical trailing stop from peak
@@ -35,6 +37,8 @@ export interface EngineConfig {
     trendSma: number;
     aiWeight: number; // 0..1, how much the AI signal moves the ranking
     rebalanceEveryDays: number;
+    /** Extra rank places a held name may slip before it is sold (0 = sell as soon as it leaves the top). */
+    holdBuffer?: number;
   };
   tactical: {
     maxPositions: number;
@@ -87,6 +91,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
     maxPositionPctOfSleeve: 0.4,
     dailyLossLimitPct: 0.03,
     maxDrawdownPct: 0.15,
+    drawdownPauseDays: 30,
     swingStopAtr: 3,
     tacticalStopAtr: 3,
     trailingStopPct: 0.15,
@@ -103,6 +108,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
     trendSma: 200,
     aiWeight: 0.4,
     rebalanceEveryDays: 7,
+    holdBuffer: 0,
   },
   tactical: {
     maxPositions: 2,

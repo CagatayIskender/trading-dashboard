@@ -6,7 +6,9 @@ import type { EngineEvent, OrderIntent, PortfolioState } from "./types.ts";
 /**
  * Updates day/peak bookkeeping and the circuit breakers. Returns events for the log.
  * - Daily loss limit: no new buys for the rest of the day.
- * - Max drawdown: no new buys until the user resets it from the panel.
+ * - Max drawdown: no new buys for `drawdownPauseDays`, or until the user resets it from the panel
+ *   when that is 0. When the pause ends, drawdowns are measured from the current level again,
+ *   so the brake does not fire straight back on.
  */
 export function updateRiskState(state: PortfolioState, equity: number, config: EngineConfig, t: number): EngineEvent[] {
   const events: EngineEvent[] = [];
@@ -14,22 +16,31 @@ export function updateRiskState(state: PortfolioState, equity: number, config: E
   if (state.dayKey !== today) {
     state.dayKey = today;
     state.dayStartEquity = equity;
-    if (state.halted && state.halted.until !== null && state.halted.until <= t) {
+  }
+  if (state.halted && state.halted.until !== null && state.halted.until <= t) {
+    if (state.halted.kind === "drawdown") {
+      state.peakEquity = equity;
+      events.push({ t, level: "info", message: "Düşüş freni süresi doldu, alımlar yeniden açık" });
+    } else {
       events.push({ t, level: "info", message: "Günlük zarar limiti sıfırlandı, alımlar yeniden açık" });
-      state.halted = null;
     }
+    state.halted = null;
   }
   state.peakEquity = Math.max(state.peakEquity, equity);
 
   const drawdown = state.peakEquity > 0 ? 1 - equity / state.peakEquity : 0;
-  if (drawdown >= config.risk.maxDrawdownPct && state.halted?.until !== null) {
-    state.halted = { reason: `Zirveden %${(drawdown * 100).toFixed(1)} düşüş: yeni alımlar durduruldu`, until: null };
+  const drawdownHalted = state.halted?.kind === "drawdown" || (state.halted !== null && state.halted.until === null);
+  if (drawdown >= config.risk.maxDrawdownPct && !drawdownHalted) {
+    const pause = config.risk.drawdownPauseDays;
+    const until = pause > 0 ? Date.parse(`${today}T00:00:00Z`) + (pause + 1) * 86_400_000 : null;
+    const tail = until === null ? "panelden açılana kadar" : `${pause} gün`;
+    state.halted = { reason: `Zirveden %${(drawdown * 100).toFixed(1)} düşüş: yeni alımlar ${tail} durduruldu`, until, kind: "drawdown" };
     events.push({ t, level: "risk", message: state.halted.reason });
   } else if (!state.halted) {
     const dayLoss = state.dayStartEquity > 0 ? 1 - equity / state.dayStartEquity : 0;
     if (dayLoss >= config.risk.dailyLossLimitPct) {
       const nextDay = Date.parse(`${today}T00:00:00Z`) + 86_400_000;
-      state.halted = { reason: `Bugün %${(dayLoss * 100).toFixed(1)} kayıp: alımlar yarına kadar durdu`, until: nextDay };
+      state.halted = { reason: `Bugün %${(dayLoss * 100).toFixed(1)} kayıp: alımlar yarına kadar durdu`, until: nextDay, kind: "daily" };
       events.push({ t, level: "risk", message: state.halted.reason });
     }
   }

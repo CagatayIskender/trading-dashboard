@@ -18,8 +18,15 @@ export function ema(values: number[], period: number): number | null {
   return e;
 }
 
+/**
+ * Wilder smoothing forgets old data geometrically: after 20 periods the weight left on the
+ * seed is below 1e-6 of a typical move, so RSI and ATR only read this many recent bars.
+ */
+const WILDER_TAIL_PERIODS = 20;
+
 /** Wilder's RSI. */
-export function rsi(values: number[], period = 14): number | null {
+export function rsi(all: number[], period = 14): number | null {
+  const values = all.length > period * WILDER_TAIL_PERIODS ? all.slice(-period * WILDER_TAIL_PERIODS) : all;
   if (values.length < period + 1) return null;
   let gain = 0;
   let loss = 0;
@@ -40,7 +47,8 @@ export function rsi(values: number[], period = 14): number | null {
 }
 
 /** Wilder's Average True Range. */
-export function atr(bars: Bar[], period = 14): number | null {
+export function atr(all: Bar[], period = 14): number | null {
+  const bars = all.length > period * WILDER_TAIL_PERIODS ? all.slice(-period * WILDER_TAIL_PERIODS) : all;
   if (bars.length < period + 1) return null;
   const trs: number[] = [];
   for (let i = 1; i < bars.length; i++) {

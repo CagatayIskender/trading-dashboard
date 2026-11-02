@@ -55,12 +55,20 @@ export function swingStrategy(ctx: StrategyContext): OrderIntent[] {
 
   const budget = sleeveBudgetEur(ctx, "swing");
   const ranked = rankSwing(ctx);
-  const picks = ranked.filter((c) => c.inTrend && c.score > 0).slice(0, sc.maxPositions);
-  const pickSet = new Set(picks.map((p) => p.symbol));
+  const eligible = ranked.filter((c) => c.inTrend && c.score > 0);
+  // A held name is kept while it stays inside the top maxPositions + holdBuffer, so small
+  // rank changes do not cause a sell and a buy (two fees) every review.
+  const keepWithin = sc.maxPositions + (sc.holdBuffer ?? 0);
+  const held = state.positions.filter((p) => p.sleeve === "swing");
+  const kept = new Set(held.filter((p) => {
+    const i = eligible.findIndex((c) => c.symbol === p.symbol);
+    return i >= 0 && i < keepWithin;
+  }).map((p) => p.symbol));
+  const picks = eligible.filter((c) => !kept.has(c.symbol)).slice(0, Math.max(0, sc.maxPositions - kept.size));
   const intents: OrderIntent[] = [];
 
-  for (const pos of state.positions.filter((p) => p.sleeve === "swing")) {
-    if (pickSet.has(pos.symbol)) continue;
+  for (const pos of held) {
+    if (kept.has(pos.symbol)) continue;
     const price = view.priceEur(pos.symbol);
     if (price === null) continue;
     const c = ranked.find((r) => r.symbol === pos.symbol);
