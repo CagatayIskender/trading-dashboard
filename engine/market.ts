@@ -1,5 +1,5 @@
-import { FX_SYMBOL } from "./config.ts";
-import type { Bar, Instrument, MarketData } from "./types.ts";
+import { FX_SYMBOLS } from "./config.ts";
+import type { Bar, Currency, Instrument, MarketData } from "./types.ts";
 
 /**
  * A point-in-time view of market data. Strategies only ever see bars up to `asOf`,
@@ -31,9 +31,9 @@ export class MarketView {
     return out;
   }
 
-  /** USD per 1 EUR as of now, or null when FX data is missing. */
-  usdPerEur(): number | null {
-    const fx = this.bars(FX_SYMBOL);
+  /** Units of `currency` per 1 EUR as of now, or null when FX data is missing. */
+  perEur(currency: Exclude<Currency, "EUR">): number | null {
+    const fx = this.bars(FX_SYMBOLS[currency]);
     return fx.length ? fx[fx.length - 1]!.c : null;
   }
 
@@ -41,7 +41,7 @@ export class MarketView {
   toEur(symbol: string, price: number): number | null {
     const inst = this.bySymbol.get(symbol);
     if (!inst || inst.currency === "EUR") return price;
-    const rate = this.usdPerEur();
+    const rate = this.perEur(inst.currency);
     return rate ? price / rate : null;
   }
 

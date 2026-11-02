@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, FX_SYMBOL, type EngineConfig } from "../engine/config.ts";
+import { DEFAULT_CONFIG, FX_SYMBOLS, type EngineConfig } from "../engine/config.ts";
 import type { Bar, MarketData } from "../engine/types.ts";
 
 /** Deterministic PRNG so tests are repeatable. */
@@ -36,7 +36,7 @@ export function flat(days: number, price: number): Bar[] {
 }
 
 export function syntheticMarket(days = 700): MarketData {
-  const data: MarketData = { [FX_SYMBOL]: flat(days, 1.1) };
+  const data: MarketData = { [FX_SYMBOLS.USD]: flat(days, 1.1), [FX_SYMBOLS.DKK]: flat(days, 7.46) };
   DEFAULT_CONFIG.universe.forEach((inst, i) => {
     data[inst.symbol] = walk(days, { seed: 100 + i, drift: 0.0001 + (i % 5) * 0.0002, vol: inst.assetClass === "crypto" ? 0.03 : 0.012 });
   });

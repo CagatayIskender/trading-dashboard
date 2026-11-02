@@ -1,4 +1,4 @@
-import type { Instrument, Sleeve } from "./types.ts";
+import type { Currency, Instrument, Sleeve } from "./types.ts";
 
 /**
  * All tunables live here so the web panel can edit them (stored as JSON in the
@@ -62,7 +62,7 @@ export const DEFAULT_UNIVERSE: Instrument[] = [
   { symbol: "SAP.DE", name: "SAP", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
   { symbol: "SIE.DE", name: "Siemens", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
   { symbol: "MC.PA", name: "LVMH", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
-  { symbol: "NOVO-B.CO", name: "Novo Nordisk", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
+  { symbol: "NOVO-B.CO", name: "Novo Nordisk", assetClass: "stock", currency: "DKK", sleeves: ["swing"] },
   // Tactical: crypto, traded 24/7.
   { symbol: "BTC-EUR", name: "Bitcoin", assetClass: "crypto", currency: "EUR", sleeves: ["tactical"] },
   { symbol: "ETH-EUR", name: "Ethereum", assetClass: "crypto", currency: "EUR", sleeves: ["tactical"] },
@@ -107,5 +107,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   benchmark: "EUNL.DE",
 };
 
-/** Symbol used to convert USD prices to EUR (EUR per 1 USD = 1 / close). */
-export const FX_SYMBOL = "EURUSD=X";
+/** Yahoo FX symbols quoting units of each currency per 1 EUR. */
+export const FX_SYMBOLS: Record<Exclude<Currency, "EUR">, string> = {
+  USD: "EURUSD=X",
+  DKK: "EURDKK=X",
+};
+/** Kept for callers that only need the USD rate. */
+export const FX_SYMBOL = FX_SYMBOLS.USD;

@@ -178,6 +178,17 @@ describe("backtest", () => {
   });
 });
 
+describe("currency", () => {
+  it("converts USD and DKK prices to EUR", () => {
+    const cfg = config();
+    const data = syntheticMarket(10);
+    const view = new MarketView(data, cfg.universe, T0 + 9 * DAY);
+    expect(view.toEur("AAPL", 110)).toBeCloseTo(100);
+    expect(view.toEur("NOVO-B.CO", 746)).toBeCloseTo(100);
+    expect(view.toEur("SAP.DE", 100)).toBe(100);
+  });
+});
+
 describe("yahoo parser", () => {
   it("uses adjusted closes and skips empty rows", () => {
     const bars = parseChart({

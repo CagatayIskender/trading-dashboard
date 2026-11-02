@@ -1,8 +1,11 @@
-// Supabase Edge Function, called every 15 minutes by pg_cron (see supabase/schedule.sql).
+// Supabase Edge Function, called every 15 minutes by pg_cron (see supabase/migrations/0002_schedule.sql).
 // Runs the engine for every active account: stop checks on each tick, strategies once a day.
+// With body {"action":"backtest","range":"5y"} it instead replays real history and stores
+// the result in backtest_runs.
 // `./engine` is a copy of the repo's engine/ made by scripts/prepare-functions.sh before deploy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { FX_SYMBOL, type EngineConfig } from "./engine/config.ts";
+import { DEFAULT_CONFIG, FX_SYMBOLS, type EngineConfig } from "./engine/config.ts";
+import { backtest } from "./engine/backtest.ts";
 import { runCycle } from "./engine/cycle.ts";
 import { fetchDailyBars } from "./engine/data/yahoo.ts";
 import type { Bar, MarketData, PortfolioState, Signal } from "./engine/types.ts";
@@ -11,10 +14,10 @@ const STRATEGY_HOUR_UTC = 15; // after the European close, during US trading
 const HISTORY_DAYS = 400; // enough for the 200-day average plus warm-up
 
 Deno.serve(async (req) => {
-  const secret = Deno.env.get("CRON_SECRET");
-  if (!secret || req.headers.get("x-cron-secret") !== secret) return new Response("forbidden", { status: 403 });
-
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  if (!(await authorized(db, req))) return new Response("forbidden", { status: 403 });
+  const body = await req.json().catch(() => ({}));
+  if (body?.action === "backtest") return runBacktest(db, typeof body.range === "string" ? body.range : "5y");
   const now = Date.now();
   const today = new Date(now).toISOString().slice(0, 10);
 
@@ -23,7 +26,7 @@ Deno.serve(async (req) => {
   if (!accounts?.length) return Response.json({ ok: true, accounts: 0 });
 
   // One download per symbol per tick, shared by all accounts.
-  const symbols = new Set<string>([FX_SYMBOL]);
+  const symbols = new Set<string>(Object.values(FX_SYMBOLS));
   for (const a of accounts) for (const i of (a.config as EngineConfig).universe) symbols.add(i.symbol);
   const data = await loadMarket(db, [...symbols], now);
 
@@ -64,7 +67,35 @@ Deno.serve(async (req) => {
 });
 
 // deno-lint-ignore no-explicit-any
-async function loadMarket(db: any, symbols: string[], now: number): Promise<MarketData> {
+async function runBacktest(db: any, range: string): Promise<Response> {
+  const config = DEFAULT_CONFIG;
+  const data: MarketData = {};
+  const missing: string[] = [];
+  await Promise.all([...config.universe.map((i) => i.symbol), ...Object.values(FX_SYMBOLS)].map(async (s) => {
+    try {
+      data[s] = await fetchDailyBars(s, range);
+    } catch (e) {
+      missing.push(`${s}: ${(e as Error).message}`);
+    }
+  }));
+  const r = backtest(data, config);
+  // Weekly points keep the stored curve small.
+  const curve = r.curve.filter((_, i) => i % 5 === 0 || i === r.curve.length - 1);
+  await db.from("backtest_runs").insert({ range, config, metrics: r.metrics, curve, fills: r.fills });
+  return Response.json({ range, metrics: r.metrics, missing, days: r.curve.length });
+}
+
+/** The cron job sends a random secret stored in app_secrets (readable only with the service role). */
+// deno-lint-ignore no-explicit-any
+export async function authorized(db: any, req: Request): Promise<boolean> {
+  const sent = req.headers.get("x-cron-secret");
+  if (!sent) return false;
+  const { data } = await db.from("app_secrets").select("value").eq("name", "cron_secret").maybeSingle();
+  return !!data?.value && data.value === sent;
+}
+
+// deno-lint-ignore no-explicit-any
+export async function loadMarket(db: any, symbols: string[], now: number): Promise<MarketData> {
   const since = new Date(now - HISTORY_DAYS * 1.5 * 86_400_000).toISOString().slice(0, 10);
   const data: MarketData = {};
   await Promise.all(symbols.map(async (symbol) => {

@@ -3,7 +3,7 @@
 // prints the result next to simply holding the MSCI World ETF.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { backtest } from "../engine/backtest.ts";
-import { DEFAULT_CONFIG, FX_SYMBOL } from "../engine/config.ts";
+import { DEFAULT_CONFIG, FX_SYMBOLS } from "../engine/config.ts";
 import { fetchDailyBars } from "../engine/data/yahoo.ts";
 import type { MarketData } from "../engine/types.ts";
 
@@ -11,7 +11,7 @@ const range = process.argv[2] ?? "5y";
 const cacheDir = "data-cache";
 mkdirSync(cacheDir, { recursive: true });
 
-const symbols = [...DEFAULT_CONFIG.universe.map((i) => i.symbol), FX_SYMBOL];
+const symbols = [...DEFAULT_CONFIG.universe.map((i) => i.symbol), ...Object.values(FX_SYMBOLS)];
 const data: MarketData = {};
 for (const s of symbols) {
   const file = `${cacheDir}/${s.replace(/[^A-Za-z0-9.-]/g, "_")}-${range}.json`;

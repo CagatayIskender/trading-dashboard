@@ -12,3 +12,9 @@ Kendi kendine çalışan, demo modlu çok piyasalı trading sistemi.
 - `supabase/`: veritabanı şeması, 15 dakikada bir çalışan `engine-tick` fonksiyonu ve zamanlayıcı
 
 Komutlar: `npm test`, `npm run typecheck`, `npm run backtest -- 5y`
+
+## Canlı kurulum (Supabase, proje `dljsznnfhyigjonojvfl`, Frankfurt)
+
+- `engine-tick` fonksiyonu pg_cron ile her 15 dakikada çalışır; stratejiler günde bir kez 15:00 UTC sonrası çalışır.
+- Geçmiş test: `select public.call_function('engine-tick', '{"action":"backtest","range":"5y"}');` sonuç `backtest_runs` tablosuna yazılır.
+- Fonksiyonu güncellemeden önce `scripts/prepare-functions.sh` motoru fonksiyon klasörüne kopyalar.
