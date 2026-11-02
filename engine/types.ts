@@ -3,7 +3,7 @@
 
 export type Sleeve = "core" | "swing" | "tactical";
 export type AssetClass = "etf" | "stock" | "crypto";
-export type Currency = "EUR" | "USD" | "DKK";
+export type Currency = "EUR" | "USD" | "DKK" | "CHF";
 export type Mode = "demo" | "live";
 
 export interface Instrument {

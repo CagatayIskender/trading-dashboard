@@ -135,9 +135,12 @@ async function dashboard(db: Db) {
   const held = [...new Set(state.positions.map((p) => p.symbol))];
   const symbols = [...held, ...Object.values(FX_SYMBOLS), config.benchmark];
   const since = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
-  const { data: bars } = await db.from("market_bars").select("symbol,day,o,h,l,c,v").in("symbol", symbols).gte("day", since).order("day");
+  // One query per symbol: a single query over all of them would hit the API's 1000-row cap and drop the newest days.
   const data: MarketData = {};
-  for (const r of bars ?? []) (data[r.symbol] ??= []).push({ t: Date.parse(r.day), o: r.o, h: r.h, l: r.l, c: r.c, v: r.v } as Bar);
+  await Promise.all(symbols.map(async (symbol) => {
+    const { data: bars } = await db.from("market_bars").select("day,o,h,l,c,v").eq("symbol", symbol).gte("day", since).order("day");
+    data[symbol] = (bars ?? []).map((r: { day: string; o: number; h: number; l: number; c: number; v: number }) => ({ t: Date.parse(r.day), o: r.o, h: r.h, l: r.l, c: r.c, v: r.v } as Bar));
+  }));
   const view = new MarketView(data, config.universe, Date.now());
 
   const equity = equityEur(state, view);

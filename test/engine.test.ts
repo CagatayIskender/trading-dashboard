@@ -238,8 +238,9 @@ describe("config and stats helpers", () => {
 
   it("a re-entry cooldown cuts short-term trading", () => {
     const data = syntheticMarket(700);
-    const loose = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 0, minHoldDays: 0, regimeSma: 0, rsiMax: 75 } }));
-    const strict = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 20, minHoldDays: 10, rsiMax: 75 } }));
+    const only = { sleeveWeights: { core: 0, swing: 0, tactical: 1 } };
+    const loose = backtest(data, config({ ...only, tactical: { ...config().tactical, cooldownDays: 0, minHoldDays: 0, regimeSma: 0, rsiMax: 75 } }));
+    const strict = backtest(data, config({ ...only, tactical: { ...config().tactical, cooldownDays: 20, minHoldDays: 10, rsiMax: 75 } }));
     const count = (r: typeof loose) => r.fills.filter((f) => f.sleeve === "tactical").length;
     expect(count(strict)).toBeLessThan(count(loose));
   });

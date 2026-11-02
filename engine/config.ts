@@ -59,26 +59,73 @@ export interface EngineConfig {
   benchmark: string; // symbol used to judge performance
 }
 
+/**
+ * The medium-term layer picks from a wide list on purpose: today's winners (NVIDIA, Microsoft)
+ * next to the giants of 2014 that later lagged (GE, IBM, Intel, Bayer, Exxon). A short list of
+ * names we already know did well makes backtests look far better than the future will be.
+ */
+const stock = (symbol: string, name: string, currency: Currency, tactical = false): Instrument =>
+  ({ symbol, name, assetClass: "stock", currency, sleeves: tactical ? ["swing", "tactical"] : ["swing"] });
+
 export const DEFAULT_UNIVERSE: Instrument[] = [
   // Core: broad, cheap UCITS ETFs traded on Xetra in EUR.
   { symbol: "EUNL.DE", name: "iShares Core MSCI World", assetClass: "etf", currency: "EUR", sleeves: ["core"] },
   { symbol: "IS3N.DE", name: "iShares Core MSCI EM IMI", assetClass: "etf", currency: "EUR", sleeves: ["core"] },
-  // Swing: liquid large caps across the US and Europe.
-  { symbol: "AAPL", name: "Apple", assetClass: "stock", currency: "USD", sleeves: ["swing", "tactical"] },
-  { symbol: "MSFT", name: "Microsoft", assetClass: "stock", currency: "USD", sleeves: ["swing", "tactical"] },
-  { symbol: "NVDA", name: "NVIDIA", assetClass: "stock", currency: "USD", sleeves: ["swing", "tactical"] },
-  { symbol: "GOOGL", name: "Alphabet", assetClass: "stock", currency: "USD", sleeves: ["swing", "tactical"] },
-  { symbol: "AMZN", name: "Amazon", assetClass: "stock", currency: "USD", sleeves: ["swing", "tactical"] },
-  { symbol: "JPM", name: "JPMorgan Chase", assetClass: "stock", currency: "USD", sleeves: ["swing"] },
-  { symbol: "ASML.AS", name: "ASML", assetClass: "stock", currency: "EUR", sleeves: ["swing", "tactical"] },
-  { symbol: "SAP.DE", name: "SAP", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
-  { symbol: "SIE.DE", name: "Siemens", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
-  { symbol: "MC.PA", name: "LVMH", assetClass: "stock", currency: "EUR", sleeves: ["swing"] },
-  { symbol: "NOVO-B.CO", name: "Novo Nordisk", assetClass: "stock", currency: "DKK", sleeves: ["swing"] },
+  // Swing (and some tactical): large caps in the US.
+  stock("AAPL", "Apple", "USD", true),
+  stock("MSFT", "Microsoft", "USD", true),
+  stock("NVDA", "NVIDIA", "USD", true),
+  stock("GOOGL", "Alphabet", "USD", true),
+  stock("AMZN", "Amazon", "USD", true),
+  stock("META", "Meta Platforms", "USD"),
+  stock("BRK-B", "Berkshire Hathaway", "USD"),
+  stock("JPM", "JPMorgan Chase", "USD"),
+  stock("BAC", "Bank of America", "USD"),
+  stock("WFC", "Wells Fargo", "USD"),
+  stock("V", "Visa", "USD"),
+  stock("JNJ", "Johnson & Johnson", "USD"),
+  stock("PFE", "Pfizer", "USD"),
+  stock("MRK", "Merck & Co.", "USD"),
+  stock("UNH", "UnitedHealth", "USD"),
+  stock("XOM", "Exxon Mobil", "USD"),
+  stock("CVX", "Chevron", "USD"),
+  stock("WMT", "Walmart", "USD"),
+  stock("PG", "Procter & Gamble", "USD"),
+  stock("KO", "Coca-Cola", "USD"),
+  stock("PEP", "PepsiCo", "USD"),
+  stock("HD", "Home Depot", "USD"),
+  stock("DIS", "Walt Disney", "USD"),
+  stock("GE", "General Electric", "USD"),
+  stock("IBM", "IBM", "USD"),
+  stock("INTC", "Intel", "USD"),
+  stock("CSCO", "Cisco", "USD"),
+  stock("ORCL", "Oracle", "USD"),
+  stock("T", "AT&T", "USD"),
+  stock("VZ", "Verizon", "USD"),
+  // Europe.
+  stock("ASML.AS", "ASML", "EUR", true),
+  stock("SAP.DE", "SAP", "EUR"),
+  stock("SIE.DE", "Siemens", "EUR"),
+  stock("ALV.DE", "Allianz", "EUR"),
+  stock("DTE.DE", "Deutsche Telekom", "EUR"),
+  stock("BAS.DE", "BASF", "EUR"),
+  stock("BAYN.DE", "Bayer", "EUR"),
+  stock("MC.PA", "LVMH", "EUR"),
+  stock("OR.PA", "L'Oréal", "EUR"),
+  stock("TTE.PA", "TotalEnergies", "EUR"),
+  stock("SAN.PA", "Sanofi", "EUR"),
+  stock("AIR.PA", "Airbus", "EUR"),
+  stock("NOVO-B.CO", "Novo Nordisk", "DKK"),
+  stock("NESN.SW", "Nestlé", "CHF"),
+  stock("NOVN.SW", "Novartis", "CHF"),
+  stock("ROG.SW", "Roche", "CHF"),
   // Tactical: crypto, traded 24/7.
   { symbol: "BTC-EUR", name: "Bitcoin", assetClass: "crypto", currency: "EUR", sleeves: ["tactical"] },
   { symbol: "ETH-EUR", name: "Ethereum", assetClass: "crypto", currency: "EUR", sleeves: ["tactical"] },
 ];
+
+/** The original 11-stock list, kept to compare backtests against. */
+export const NARROW_SWING = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "JPM", "ASML.AS", "SAP.DE", "SIE.DE", "MC.PA", "NOVO-B.CO"];
 
 export const DEFAULT_CONFIG: EngineConfig = {
   startingCapitalEur: 2000,
@@ -104,7 +151,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   },
   swing: {
     maxPositions: 3,
-    momentumLookbackDays: 126,
+    momentumLookbackDays: 189,
     skipRecentDays: 21,
     trendSma: 200,
     aiWeight: 0.4,
@@ -132,6 +179,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
 export const FX_SYMBOLS: Record<Exclude<Currency, "EUR">, string> = {
   USD: "EURUSD=X",
   DKK: "EURDKK=X",
+  CHF: "EURCHF=X",
 };
 /** Kept for callers that only need the USD rate. */
 export const FX_SYMBOL = FX_SYMBOLS.USD;
