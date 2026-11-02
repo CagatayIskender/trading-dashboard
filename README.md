@@ -18,3 +18,7 @@ Komutlar: `npm test`, `npm run typecheck`, `npm run backtest -- 5y`
 - `engine-tick` fonksiyonu pg_cron ile her 15 dakikada çalışır; stratejiler günde bir kez 15:00 UTC sonrası çalışır.
 - Geçmiş test: `select public.call_function('engine-tick', '{"action":"backtest","range":"5y"}');` sonuç `backtest_runs` tablosuna yazılır.
 - Fonksiyonu güncellemeden önce `scripts/prepare-functions.sh` motoru fonksiyon klasörüne kopyalar.
+
+## Web paneli (`panel/`)
+
+Vite + React. Veriyi `panel-api` Edge Function'dan alır (şifreli giriş, ilk kurulumda tek kullanımlık kod). Vercel'de `panel` klasöründen yayınlanır.
