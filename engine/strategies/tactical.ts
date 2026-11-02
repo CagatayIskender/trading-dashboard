@@ -1,7 +1,7 @@
-import { atr, ema, momentum, rsi } from "../indicators.ts";
+import { atr, ema, momentum, rsi, sma } from "../indicators.ts";
 import { findPosition } from "../portfolio.ts";
 import type { OrderIntent } from "../types.ts";
-import { aiRationale, aiScore, sleeveBudgetEur, type StrategyContext } from "./context.ts";
+import { aiRationale, aiScore, DAY_MS, sleeveBudgetEur, type StrategyContext } from "./context.ts";
 
 /**
  * Short-term layer: follow strong trends in crypto and fast-moving stocks with tight
@@ -16,6 +16,7 @@ export function tacticalStrategy(ctx: StrategyContext): OrderIntent[] {
   const setups: Setup[] = [];
   for (const inst of config.universe) {
     if (!inst.sleeves.includes("tactical") || !view.isFresh(inst.symbol)) continue;
+    if (tc.assetClasses && !tc.assetClasses.includes(inst.assetClass)) continue;
     const closes = view.closes(inst.symbol);
     const fast = ema(closes, tc.fastEma);
     const slow = ema(closes, tc.slowEma);
@@ -26,9 +27,13 @@ export function tacticalStrategy(ctx: StrategyContext): OrderIntent[] {
     if (fast === null || slow === null || r === null || a === null || mom === null || price === null) continue;
     const last = closes[closes.length - 1]!;
     const ai = aiScore(signals, inst.symbol, t, "short");
+    const regime = tc.regimeSma ? sma(closes, tc.regimeSma) : null;
+    const regimeOk = !tc.regimeSma || (regime !== null && last > regime);
+    const exitedAt = state.lastExit?.[`${inst.symbol}|tactical`];
+    const cooled = !tc.cooldownDays || exitedAt === undefined || t - exitedAt >= tc.cooldownDays * DAY_MS;
     setups.push({
       symbol: inst.symbol,
-      entry: last > fast && fast > slow && r < tc.rsiMax && ai > -0.3,
+      entry: last > fast && fast > slow && r < tc.rsiMax && ai > -0.3 && regimeOk && cooled,
       exit: last < slow || ai < -0.5,
       strength: (1 - tc.aiWeight) * mom + tc.aiWeight * ai,
       price,
@@ -40,7 +45,8 @@ export function tacticalStrategy(ctx: StrategyContext): OrderIntent[] {
   let open = held.length;
   for (const pos of held) {
     const s = setups.find((x) => x.symbol === pos.symbol);
-    if (s?.exit) {
+    const heldLongEnough = !tc.minHoldDays || t - pos.openedAt >= tc.minHoldDays * DAY_MS;
+    if (s?.exit && heldLongEnough) {
       intents.push({ symbol: pos.symbol, sleeve: "tactical", side: "sell", qty: pos.qty, refPriceEur: s.price, reason: "Kısa vade çıkış: trend zayıfladı" });
       open--;
     }

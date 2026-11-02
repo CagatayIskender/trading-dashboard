@@ -50,6 +50,8 @@ export interface PortfolioState {
   /** Set when a risk limit stops new buying; cleared by the rule that set it. */
   halted: null | { reason: string; until: number | null };
   lastRebalance: Partial<Record<Sleeve, number>>;
+  /** When each symbol|sleeve was last sold, for re-entry cooldowns. */
+  lastExit?: Record<string, number>;
 }
 
 export type Side = "buy" | "sell";

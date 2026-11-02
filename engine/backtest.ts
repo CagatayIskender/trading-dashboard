@@ -79,6 +79,32 @@ export function computeMetrics(curve: EquityPoint[], fills: Fill[], start: numbe
   };
 }
 
+export interface SleeveStats {
+  trades: number;
+  feesEur: number;
+  realizedEur: number; // after fees on both legs
+  winRate: number | null;
+}
+
+/** Trade count and realised result per strategy layer. */
+export function sleeveStats(fills: Fill[]): Record<string, SleeveStats> {
+  const out: Record<string, SleeveStats & { wins: number; sells: number }> = {};
+  for (const f of fills) {
+    const s = (out[f.sleeve] ??= { trades: 0, feesEur: 0, realizedEur: 0, winRate: null, wins: 0, sells: 0 });
+    s.trades++;
+    s.feesEur += f.feeEur;
+    if (f.side === "buy") s.realizedEur -= f.feeEur; // buy fee is not inside realizedPnl
+    if (f.side === "sell" && f.realizedPnlEur !== null) {
+      s.realizedEur += f.realizedPnlEur;
+      s.sells++;
+      if (f.realizedPnlEur > 0) s.wins++;
+    }
+  }
+  const res: Record<string, SleeveStats> = {};
+  for (const [k, { wins, sells, ...s }] of Object.entries(out)) res[k] = { ...s, winRate: sells ? wins / sells : null };
+  return res;
+}
+
 function cagr(start: number, end: number, years: number): number {
   return years > 0 && start > 0 ? (end / start) ** (1 / years) - 1 : 0;
 }

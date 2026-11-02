@@ -96,6 +96,7 @@ export function applyFill(state: PortfolioState, fill: Fill, stopEur: number | n
     return;
   }
   if (!pos) return;
+  state.lastExit = { ...(state.lastExit ?? {}), [`${fill.symbol}|${fill.sleeve}`]: fill.t };
   state.cashEur += fill.qty * fill.priceEur - fill.feeEur;
   pos.qty -= fill.qty;
   if (pos.qty <= 1e-9) state.positions = state.positions.filter((p) => p !== pos);

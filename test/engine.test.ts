@@ -208,3 +208,31 @@ describe("yahoo parser", () => {
     expect(bars[0]!.h).toBe(5.5);
   });
 });
+
+describe("config and stats helpers", () => {
+  it("deep-merges overrides without touching the base", async () => {
+    const { mergeConfig, DEFAULT_CONFIG } = await import("../engine/config.ts");
+    const merged = mergeConfig(DEFAULT_CONFIG, { tactical: { cooldownDays: 3 }, risk: { trailingStopPct: 0.12 } });
+    expect(merged.tactical.cooldownDays).toBe(3);
+    expect(merged.tactical.fastEma).toBe(DEFAULT_CONFIG.tactical.fastEma);
+    expect(merged.risk.trailingStopPct).toBe(0.12);
+    expect(DEFAULT_CONFIG.tactical.cooldownDays).toBe(10);
+  });
+
+  it("a re-entry cooldown cuts short-term trading", () => {
+    const data = syntheticMarket(700);
+    const loose = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 0, minHoldDays: 0, regimeSma: 0 } }));
+    const strict = backtest(data, config({ tactical: { ...config().tactical, cooldownDays: 20, minHoldDays: 10 } }));
+    const count = (r: typeof loose) => r.fills.filter((f) => f.sleeve === "tactical").length;
+    expect(count(strict)).toBeLessThan(count(loose));
+  });
+
+  it("splits results by layer", async () => {
+    const { sleeveStats } = await import("../engine/backtest.ts");
+    const s = sleeveStats([
+      { symbol: "A", sleeve: "swing", side: "buy", qty: 1, priceEur: 100, feeEur: 1, t: 0, reason: "", realizedPnlEur: null },
+      { symbol: "A", sleeve: "swing", side: "sell", qty: 1, priceEur: 110, feeEur: 1, t: 1, reason: "", realizedPnlEur: 9 },
+    ]);
+    expect(s.swing).toEqual({ trades: 2, feesEur: 2, realizedEur: 8, winRate: 1 });
+  });
+});

@@ -1,4 +1,4 @@
-import type { Currency, Instrument, Sleeve } from "./types.ts";
+import type { AssetClass, Currency, Instrument, Sleeve } from "./types.ts";
 
 /**
  * All tunables live here so the web panel can edit them (stored as JSON in the
@@ -42,6 +42,14 @@ export interface EngineConfig {
     slowEma: number;
     rsiMax: number; // do not chase overbought moves
     aiWeight: number;
+    /** Only enter when price is above this long average (0 turns the filter off). */
+    regimeSma: number;
+    /** Days to wait after an exit before buying the same symbol again. */
+    cooldownDays: number;
+    /** Days a position is held before a trend exit may close it (stops still apply). */
+    minHoldDays: number;
+    /** Asset classes this layer may trade. */
+    assetClasses: AssetClass[];
   };
   universe: Instrument[];
   benchmark: string; // symbol used to judge performance
@@ -80,8 +88,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
     dailyLossLimitPct: 0.03,
     maxDrawdownPct: 0.15,
     swingStopAtr: 3,
-    tacticalStopAtr: 2,
-    trailingStopPct: 0.08,
+    tacticalStopAtr: 3,
+    trailingStopPct: 0.15,
   },
   core: {
     targets: { "EUNL.DE": 0.8, "IS3N.DE": 0.2 },
@@ -102,6 +110,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
     slowEma: 50,
     rsiMax: 75,
     aiWeight: 0.3,
+    // Chosen from 5y and 10y backtests (2026-11-02): fewer, better short-term trades.
+    regimeSma: 200,
+    cooldownDays: 10,
+    minHoldDays: 5,
+    assetClasses: ["etf", "stock", "crypto"],
   },
   universe: DEFAULT_UNIVERSE,
   benchmark: "EUNL.DE",
@@ -114,3 +127,22 @@ export const FX_SYMBOLS: Record<Exclude<Currency, "EUR">, string> = {
 };
 /** Kept for callers that only need the USD rate. */
 export const FX_SYMBOL = FX_SYMBOLS.USD;
+
+type DeepPartial<T> = { [K in keyof T]?: T[K] extends (infer _U)[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K] };
+
+/** Deep-merges settings from the panel (or a backtest variant) over a base config. Arrays are replaced. */
+export function mergeConfig(base: EngineConfig, overrides: DeepPartial<EngineConfig> | undefined): EngineConfig {
+  const out = structuredClone(base) as unknown as Record<string, unknown>;
+  const walk = (target: Record<string, unknown>, src: Record<string, unknown>) => {
+    for (const [k, v] of Object.entries(src)) {
+      const cur = target[k];
+      if (v && typeof v === "object" && !Array.isArray(v) && cur && typeof cur === "object" && !Array.isArray(cur)) {
+        walk(cur as Record<string, unknown>, v as Record<string, unknown>);
+      } else if (v !== undefined) {
+        target[k] = structuredClone(v);
+      }
+    }
+  };
+  if (overrides) walk(out, overrides as Record<string, unknown>);
+  return out as unknown as EngineConfig;
+}
